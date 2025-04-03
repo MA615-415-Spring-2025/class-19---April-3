@@ -1,0 +1,351 @@
+---
+title: "Mapping with ggplot2"
+author: "MA615"
+date: "2024 Nov 8"
+format: html
+editor: visual
+---
+
+# Mapping with ggplot2 {.smaller}
+
+Reference: [Nico Hahn, *Making Maps with R*](https://bookdown.org/nicohahn/making_maps_with_r5/docs/introduction.html)
+
+Find the data for examples in this repo: [github.com/nicoFhahn/making_maps_with_r](https://github.com/nicoFhahn/making_maps_with_r)
+
+It's ggplot2, so --\
+[ggplot2: Elegant Graphics for Data Analysis (3e)](https://ggplot2-book.org/)
+
+# Setup
+
+## Packages
+
+```{r}
+#| label: libraries
+#| warning: false
+#| message: false
+#| echo: false
+
+library(tidyverse)
+# for loading our data
+library(jsonlite)
+library(rgdal)
+library(sf)
+# for plotting
+library(extrafont)
+
+library(ggspatial)
+library(patchwork)
+library(scico)
+# library(vapoRwave)
+
+```
+
+To get a better sense of what the data contains, plot mi_counties using geom_point(). Each row in the data frame is plotted as a single point, producing a scatterplot that shows the corners of every county.
+
+```{r}
+#| label: ggplot polygonal map data
+#| warning: false
+#| message: false
+
+
+mi_counties <- map_data("county", "michigan") %>% 
+  select(lon = long, lat, group, id = subregion)
+head(mi_counties)
+
+
+```
+
+Use geom_polygon() to draw each county as a distinct polygon.
+
+```{r}
+#| label: ggplot polygonal data map points
+#| warning: false
+#| message: false
+
+
+ggplot(mi_counties, aes(lon, lat)) + 
+  geom_point(size = .25, show.legend = FALSE) +
+  coord_quickmap()
+
+```
+
+```{r}
+#| label: ggplot polygonal data map geom_polygon
+#| warning: false
+#| message: false
+#| 
+ggplot(mi_counties, aes(lon, lat, group = group)) +
+  geom_polygon(fill = "white", colour = "grey50") + 
+  coord_quickmap()
+
+```
+
+## Simple features maps
+
+Simple “longitude-latitude” data format is not typically used in real world mapping.
+
+Vector data for maps are typically encoded using the “simple features” standard produced by the Open Geospatial Consortium. The sf package (Pebesma 2018) developed by Edzer Pebesma https://github.com/r-spatial/sf provides a toolset for working with such data.
+
+The geom_sf() and coord_sf() functions in ggplot2 are designed to work together with the sf package.
+
+**Examples**
+
+Use ozmaps package by Michael Sumner https://github.com/mdsumner/ozmaps/ which provides maps for Australian state boundaries, local government areas, electoral boundaries.
+
+Start with the sf data set for the borders of Australian states and territories:
+
+```{r}
+#| label: Australia map data
+#| warning: false
+#| message: false
+
+library(ozmaps)
+
+#> Linking to GEOS 3.10.2, GDAL 3.4.1, PROJ 8.2.1; sf_use_s2() is TRUE
+
+oz_states <- ozmaps::ozmap_states
+oz_states
+  
+```
+
+Plot it.
+
+```{r}
+#| label: Australia
+#| warning: false
+#| message: false
+
+ggplot(oz_states) + 
+  geom_sf() + 
+  coord_sf()
+
+```
+
+## Layered maps
+
+You already know thay layering is a strength of ggplot.
+
+**Example with maps**
+
+To plot the oz_states different colors, and overlay the plot with the boundaries of Australian electoral regions.
+
+Two steps: 1. we’ll use dplyr::filter() to remove the “Other Territories” from the state boundaries.\
+2. we’ll extract the electoral boundaries in a simplified form.
+
+```{r}
+#| label: Australian states with colors
+#| warning: false
+#| message: false
+
+
+library(rmapshaper)
+
+## remove "Other Territories"
+oz_states <- ozmaps::ozmap_states %>% filter(NAME != "Other Territories")
+
+## extract simplified electoral boundaries
+oz_votes <- rmapshaper::ms_simplify(ozmaps::abs_ced)
+
+ggplot() + 
+  geom_sf(data = oz_states, mapping = aes(fill = NAME), show.legend = FALSE) +
+  geom_sf(data = oz_votes, fill = NA) + 
+  coord_sf()
+
+```
+
+## Labelled maps
+
+```{r}
+#| label: ggplot labelled maps
+#| warning: false
+#| message: false
+
+# Filter electorates in the Sydney metropolitan region
+sydney_map <- ozmaps::abs_ced %>% filter(NAME %in% c(
+  "Sydney", "Wentworth", "Warringah", "Kingsford Smith", "Grayndler", "Lowe", 
+  "North Sydney", "Barton", "Bradfield", "Banks", "Blaxland", "Reid", 
+  "Watson", "Fowler", "Werriwa", "Prospect", "Parramatta", "Bennelong", 
+  "Mackellar", "Greenway", "Mitchell", "Chifley", "McMahon"
+))
+
+# Draw the electoral map of Sydney
+ggplot(sydney_map) + 
+  geom_sf(aes(fill = NAME), show.legend = FALSE) + 
+  coord_sf(xlim = c(150.97, 151.3), ylim = c(-33.98, -33.79)) + 
+  geom_sf_label(aes(label = NAME), label.padding = unit(1, "mm"))
+#> Warning in st_point_on_surface.sfc(sf::st_zm(x)): st_point_on_surface may not
+#> give correct results for longitude/latitude data
+
+
+
+
+```
+
+## other Geoms
+
+Of course, this is a major advantage of ggplot2.
+
+```{r}
+#| label: adding other geoms
+#| warning: false
+#| message: false
+
+oz_capitals <- tibble::tribble( 
+  ~city,           ~lat,     ~lon,
+  "Sydney",    -33.8688, 151.2093,  
+  "Melbourne", -37.8136, 144.9631, 
+  "Brisbane",  -27.4698, 153.0251, 
+  "Adelaide",  -34.9285, 138.6007, 
+  "Perth",     -31.9505, 115.8605, 
+  "Hobart",    -42.8821, 147.3272, 
+  "Canberra",  -35.2809, 149.1300, 
+  "Darwin",    -12.4634, 130.8456, 
+)
+
+ggplot() + 
+  geom_sf(data = oz_votes) + 
+  geom_sf(data = oz_states, colour = "black", fill = NA) + 
+  geom_point(data = oz_capitals, mapping = aes(x = lon, y = lat), colour = "red") + 
+  coord_sf()
+
+
+
+
+
+
+
+```
+
+## ggfortify
+
+The fortify function converts an S3 object generated by evalmod to a data frame for ggplot2.
+
+```{r}
+#| label: fortify 
+
+library(maps)
+
+
+ca <- map("county", "ca", plot = FALSE, fill = TRUE)
+
+
+cadf <- fortify(ca)
+
+ ggplot(ca, aes(long, lat)) +
+  geom_polygon(aes(group = group))
+
+tx <- map("county", "texas", plot = FALSE, fill = TRUE)
+dftx <- fortify(tx)
+ggplot(dftx, aes(long, lat)) +
+  geom_polygon(aes(group = group), colour = "white")
+
+
+```
+
+## Examples from Hahn
+
+```{r}
+#| label: ggplot data
+#| echo: false
+#| include: false
+
+
+
+path1 <- "making_maps_with_r-master/"
+
+honey_sf <- read_sf(paste0(path1,"datasets/chapter_3/honey.shp"))
+colnames(honey_sf)[3:8] <- c("Number_of_colonies", "Yield_per_colony",
+                          "Total_production", "Stocks","Price_per_lb",
+                          "Value_of_production"
+)
+
+honey2008 <- honey_sf[honey_sf$year == 2008, ]
+
+state_capitals <- fromJSON("https://raw.githubusercontent.com/vega/vega/master/docs/data/us-state-capitals.json")
+
+state_capitals_sf <- st_as_sf(state_capitals, coords = c("lon", "lat"), crs = 4326)
+
+state_capitals_sf <- state_capitals_sf[!state_capitals_sf$state %in% c("Alaska", "Hawaii"), ]
+
+honey2008_multiline <- st_cast(honey2008, "MULTILINESTRING")
+
+
+```
+
+## Using ggplot2 to create maps
+
+The easiest way to create spatial plots with ggplot is to use the `geom_sf()` function. By default there is no aesthetic mapping, but we can use arguments like `fill` to easily create choropleth maps.
+
+```{r}
+#| label: ggplot basic
+#| fig-align: center
+#| fig-cap: Basic use of ggplot2 for spatial data
+
+
+usa_1 <- ggplot(data = honey2008) +
+  geom_sf()
+
+usa_2 <- ggplot(data = honey2008) +
+         geom_sf(aes(fill = Price_per_lb)) +
+         ggtitle(label = "The Honey crisis of 2008", 
+                 subtitle = "Price per lb")
+usa_1 / usa_2
+
+```
+
+Using the `annotation_*()` functions of `ggspatial` we can customize our maps by adding a base map or other elements to our map.
+
+```{r}
+#| label: ggplot adding base
+#| fig-align: center
+#| fig-cap: Adding a basemap and some elements
+#| warning: true
+#| message: true
+#| eval: false
+
+usa_3 <- ggplot(data = honey2008) +
+         geom_sf(aes(fill = Price_per_lb)) +
+layer_spatial(st_bbox(honey2008)) + 
+  layer_spatial(honey2008)+
+  
+annotation_map_tile("stamenwatercolor") +
+annotation_scale() +
+  scale_fill_viridis_c() +
+  ggtitle(label = "The Honey crisis of 2008", subtitle = "Price per lb")
+
+# usa_3
+
+# register_stadiamaps(36949652-e068-4ec9-9b96-4c6b23883b91, write = TRUE)
+
+## see https://docs.stadiamaps.com/guides/migrating-from-stamen-map-tiles/
+
+
+```
+
+We can also use the packages `vapoRwave` and `extrafonts`, do some magic and then create some vibey maps.
+
+We can also use the packages `vapoRwave` and `extrafonts`, do some magic and then create some vibey maps.
+
+```{r, fig.align="center",fig.cap= "A E S T H E T I C"}
+ggplot(data = honey2008_multiline) +
+  geom_sf(color = "#FF6B58", alpha = 0.1,  size = 4) +
+  geom_sf(color = "#FF6B58", alpha = 0.1,  size = 3) +
+  geom_sf(color = "#FF6B58", alpha = 0.2,  size = 2) +
+  geom_sf(color = "#FF6B58", alpha = 0.2,  size = 1) +
+  geom_sf(color = "#FF6B58", alpha = 1,  size = 0.5) +
+  geom_sf(color = "#F8B660", alpha = 0.1, size = 6, data = state_capitals_sf) +
+  geom_sf(color = "#F8B660", alpha = 0.1, size = 5, data = state_capitals_sf) +
+  geom_sf(color = "#F8B660", alpha = 0.2, size = 4, data = state_capitals_sf) +
+  geom_sf(color = "#F8B660", alpha = 0.2, size = 3, data = state_capitals_sf) +
+  geom_sf(color = "#F8B660", alpha = 0.4, size = 2, data = state_capitals_sf) +
+  geom_sf(color = "#F8B660", alpha = 1, size = 1, data = state_capitals_sf) +
+  labs(subtitle="An aesthetic look",
+       title="US States and their Captials", 
+       caption = "Excluding Alaska and Hawaii") + 
+ # new_retro() + 
+ # scale_colour_newRetro() +
+  guides(size = guide_legend(override.aes = list(colour = "#FA5F70FF"))) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+```
